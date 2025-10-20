@@ -391,6 +391,7 @@ class ZombieNest {
     #worldIcon: mod.WorldIcon;
     #interactPoint: mod.InteractPoint;
     #bombObj: any;
+    #alarmSound: mod.SFX;
     #explosionEffect: mod.VFX;
     #areaEffect: mod.VFX;
     spawnRemainCount: number = 0;
@@ -407,17 +408,19 @@ class ZombieNest {
         this.#worldIcon = mod.SpawnObject(mod.RuntimeSpawn_Common.WorldIcon, mod.Add(this.position, mod.Multiply(mod.UpVector(), 0.3)), this.rotation);
         this.#interactPoint = mod.SpawnObject(mod.RuntimeSpawn_Common.InteractPoint, mod.Add(this.position, mod.Multiply(mod.UpVector(), 0.3)), this.rotation);
         this.#bombObj = mod.SpawnObject(mod.RuntimeSpawn_Common.OrdinanceCrate_01, this.position, this.rotation);
+        this.#alarmSound = mod.SpawnObject(mod.RuntimeSpawn_Common.SFX_Alarm, this.position, this.rotation);
         this.#areaEffect = mod.SpawnObject(mod.RuntimeSpawn_Common.FX_SupplyVehicleStation_Range_Indicator, this.position, this.rotation);
         this.#explosionEffect = mod.SpawnObject(mod.RuntimeSpawn_Common.FX_CivCar_SUV_Explosion, this.position, this.rotation);
         this.SetupObjects();
-        this.#RepeatSpawnCheck();
+        void this.#RepeatSpawnCheck();
     }
 
     #UnspawnObjects() {
         mod.UnspawnObject(this.#worldIcon);
         mod.UnspawnObject(this.#interactPoint);
-        mod.UnspawnObject(this.#areaEffect);
         mod.UnspawnObject(this.#bombObj);
+        mod.UnspawnObject(this.#alarmSound);
+        mod.UnspawnObject(this.#areaEffect);
     }
 
     SetupObjects() {
@@ -453,7 +456,7 @@ class ZombieNest {
     OnInteractBomb(result: InteractResult): void {
         if (!this.#isArmed) {
             this.#isArmed = true;
-            this.#PlayArmedBombSequence(result.player);
+            void this.#PlayArmedBombSequence(result.player);
         }
     }
 
@@ -533,13 +536,13 @@ class GameDirector {
     static #coreNest: ZombieNest | undefined;
 
     static Setup(): void {
-        this.#PlaySetupSequence();
+        void this.#PlaySetupSequence();
     }
 
     static async #PlaySetupSequence() {
         await this.#CreateNests();
-        this.#RepeatSpawn();
-        this.#RepeatRuleCheck();
+        void this.#RepeatSpawn();
+        void this.#RepeatRuleCheck();
     }
 
     static async #CreateNests() {
@@ -690,7 +693,7 @@ class GameDirector {
             await mod.Wait(tick);
             if (this.#coreNest && !this.#coreNest.isAlive) {
                 this.isActive = false;
-                this.#PlayVictory();
+                void this.#PlayVictory();
                 return;
             }
         }
@@ -728,7 +731,7 @@ class ZombiePenalty {
     static isEnabled: boolean = true;
 
     static Setup() {
-        this.#RepeatCheck();
+        void this.#RepeatCheck();
     }
 
     static async #RepeatCheck() {
@@ -802,7 +805,7 @@ class Notification {
         if (!this.#isPlaying) {
             const content = this.#contentsQueue.shift();
             if (content) {
-                this.PlayNotification(content);
+                void this.PlayNotification(content);
             }
         }
     }
