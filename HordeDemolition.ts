@@ -1,6 +1,6 @@
 import InventorySlots = mod.InventorySlots;
 
-const enableDebug: boolean = true;
+const enableDebug: boolean = false;
 
 const aiSpawnerId: number = 101;
 
