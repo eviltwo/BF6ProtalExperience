@@ -1,3 +1,5 @@
+import VoiceOverFlags = mod.VoiceOverFlags;
+
 const enableDebug: boolean = true;
 
 const aiSpawnerId: number = 101;
@@ -8,6 +10,9 @@ export async function OnGameModeStarted() {
     const pos = mod.GetObjectPosition(mod.GetHQ(1));
     const rot = mod.CreateVector(mod.DegreesToRadians(-1), 0, 0);
     mod.SpawnObject(mod.RuntimeSpawn_Common.DeployCam, pos, rot);
+
+    const safetyAreaFX = mod.SpawnObject(mod.RuntimeSpawn_Common.FX_Gadget_SupplyCrate_Range_Indicator, mod.GetObjectPosition(mod.GetHQ(1)), mod.CreateVector(0, 0, 0));
+    mod.EnableVFX(safetyAreaFX, true);
 
     AISpawner.Setup(aiSpawnerId);
     AISpawner.team = mod.GetTeam(2);
@@ -25,6 +30,7 @@ export function OnPlayerLeaveGame(eventNumber: number) {
 }
 
 export function OnPlayerDeployed(eventPlayer: mod.Player): void {
+    SurvivorModifier.OnDeployed(eventPlayer);
     AISpawner.OnDeployed(eventPlayer);
     ZombieManager.OnDeployed(eventPlayer);
     PlayerNotifications.Get(eventPlayer)?.Push({
@@ -44,6 +50,7 @@ export function OngoingGlobal(): void {
     DebugBoard.Set(0, ZombieManager.GetInstanceCount());
     DebugBoard.Set(1, ZombieManager.GetAliveCount());
     DebugBoard.Set(2, AISpawner.GetWaitingCount());
+    DebugBoard.Set(3, GameDirector.targetZombieCount);
 }
 
 export function OnRayCastHit(
@@ -239,6 +246,7 @@ class Zombie {
     behaviorElapsedFrame: number = zombieBehaviorInterval;
     moveBehaviorUpdateElapsedFrame: number = 0;
     findTargetElapsedFrame: number = 0;
+    penaltyStack: number = 0;
 
     constructor(player: mod.Player) {
         this.player = player;
@@ -382,6 +390,7 @@ type ZombieNestSettings = {
     orientation: number;
     isShowTargetText: boolean;
     bombTimerDuration: number;
+    voiceOverFlag: mod.VoiceOverFlags;
 }
 
 class ZombieNest {
@@ -391,12 +400,14 @@ class ZombieNest {
     #worldIcon: mod.WorldIcon;
     #interactPoint: mod.InteractPoint;
     #bombObj: any;
+    #armedVoice: mod.VO;
     #alarmSound: mod.SFX;
     #explosionEffect: mod.VFX;
     #areaEffect: mod.VFX;
     spawnRemainCount: number = 0;
     isAlive: boolean = true;
     #isArmed: boolean = false;
+    #isPlayingAlarm: boolean = false;
     #areaRadius: number = 20;
 
     // Set position and orientation (radian)
@@ -408,6 +419,7 @@ class ZombieNest {
         this.#worldIcon = mod.SpawnObject(mod.RuntimeSpawn_Common.WorldIcon, mod.Add(this.position, mod.Multiply(mod.UpVector(), 0.3)), this.rotation);
         this.#interactPoint = mod.SpawnObject(mod.RuntimeSpawn_Common.InteractPoint, mod.Add(this.position, mod.Multiply(mod.UpVector(), 0.3)), this.rotation);
         this.#bombObj = mod.SpawnObject(mod.RuntimeSpawn_Common.OrdinanceCrate_01, this.position, this.rotation);
+        this.#armedVoice = mod.SpawnObject(mod.RuntimeSpawn_Common.SFX_VOModule_OneShot2D, zeroVector, zeroVector);
         this.#alarmSound = mod.SpawnObject(mod.RuntimeSpawn_Common.SFX_Alarm, this.position, this.rotation);
         this.#areaEffect = mod.SpawnObject(mod.RuntimeSpawn_Common.FX_SupplyVehicleStation_Range_Indicator, this.position, this.rotation);
         this.#explosionEffect = mod.SpawnObject(mod.RuntimeSpawn_Common.FX_CivCar_SUV_Explosion, this.position, this.rotation);
@@ -419,11 +431,15 @@ class ZombieNest {
         mod.UnspawnObject(this.#worldIcon);
         mod.UnspawnObject(this.#interactPoint);
         mod.UnspawnObject(this.#bombObj);
+        mod.UnspawnObject(this.#armedVoice);
         mod.UnspawnObject(this.#alarmSound);
         mod.UnspawnObject(this.#areaEffect);
     }
 
     SetupObjects() {
+        // SFX
+        mod.SetSFXVolume(this.#alarmSound, 0.5);
+
         // World icon
         //mod.SetWorldIconPosition(this.worldIcon, mod.GetObjectPosition(this.worldIcon));
         mod.SetWorldIconImage(this.#worldIcon, mod.WorldIconImages.Bomb);
@@ -462,6 +478,7 @@ class ZombieNest {
 
     async #PlayArmedBombSequence(armedPlayer: mod.Player) {
         mod.EnableVFX(this.#areaEffect, true);
+        mod.PlayVO(this.#armedVoice, mod.VoiceOverEvents2D.MComArmFriendly, this.settings.voiceOverFlag);
         mod.EnableInteractPoint(this.#interactPoint, false);
         mod.SetWorldIconText(this.#worldIcon, mod.Message(mod.stringkeys.percentage, 0, 0));
         mod.EnableWorldIconText(this.#worldIcon, true);
@@ -476,15 +493,22 @@ class ZombieNest {
         let elapsedTime = 0;
         while (this.isAlive && elapsedTime < this.settings.bombTimerDuration) {
             await mod.Wait(tick);
-            if (this.#IsInAreaAnyPlayer()) elapsedTime += tick;
+            const isInArea = this.#IsInAreaAnyPlayer();
+            if (isInArea) elapsedTime += tick;
+            if (isInArea != this.#isPlayingAlarm) {
+                this.#isPlayingAlarm = isInArea;
+                mod.EnableSFX(this.#alarmSound, this.#isPlayingAlarm);
+            }
             const progress = elapsedTime / this.settings.bombTimerDuration;
             const percentage = mod.Floor(progress * 100);
-            const percentageUnder = mod.Floor(((progress * 100) % 1) * 10)
+            let percentageUnder = mod.Floor(((progress * 100) % 1) * 10);
+            if (percentageUnder >= 10) percentageUnder = 9; // fix for rounding error
             mod.SetWorldIconText(this.#worldIcon, mod.Message(mod.stringkeys.percentage, percentage, percentageUnder));
         }
 
         this.isAlive = false;
         mod.EnableVFX(this.#areaEffect, false);
+        mod.EnableSFX(this.#alarmSound, false);
         this.#Explode(armedPlayer);
         this.#UnspawnObjects();
     }
@@ -525,8 +549,22 @@ class ZombieNestManager {
     }
 }
 
+const voiceOverFlags: mod.VoiceOverFlags[] = [
+    mod.VoiceOverFlags.Alpha,
+    mod.VoiceOverFlags.Bravo,
+    mod.VoiceOverFlags.Charlie,
+    mod.VoiceOverFlags.Delta,
+    mod.VoiceOverFlags.Echo,
+    mod.VoiceOverFlags.Foxtrot,
+    mod.VoiceOverFlags.Golf,
+]
+
+function GetVoiceOverFlag(index: number): mod.VoiceOverFlags {
+    return index < voiceOverFlags.length ? voiceOverFlags[index] : voiceOverFlags[0];
+}
+
 class GameDirector {
-    static #maxZombieCount: number = 80;
+    static targetZombieCount: number = 0;
     static #maxZombieSpawnCountEachNest = 15;
     static #spawnInterval: number = 8;
     static #outpostCount: number = 3;
@@ -541,6 +579,7 @@ class GameDirector {
 
     static async #PlaySetupSequence() {
         await this.#CreateNests();
+        void this.#RepeatCalcTargetZombieCount();
         void this.#RepeatSpawn();
         void this.#RepeatRuleCheck();
     }
@@ -556,12 +595,12 @@ class GameDirector {
                 position: result.position,
                 orientation: result.orientation,
                 isShowTargetText: true,
-                bombTimerDuration: 30
+                bombTimerDuration: 30,
+                voiceOverFlag: GetVoiceOverFlag(this.#outpostCount),
             });
         }
 
         // Outposts
-        const lineLength = mod.DistanceBetween(fieldStart, fieldEnd);
         const lineDirection = mod.Normalize(mod.Subtract(fieldEnd, fieldStart));
         const lineWidthMin = 8;
         const lineWidthMax = 100;
@@ -579,7 +618,8 @@ class GameDirector {
                 position: result.position,
                 orientation: result.orientation,
                 isShowTargetText: false,
-                bombTimerDuration: 10
+                bombTimerDuration: 10,
+                voiceOverFlag: GetVoiceOverFlag(i),
             });
         }
     }
@@ -666,6 +706,21 @@ class GameDirector {
         return {position: closestAveragePosition, orientation: mod.DegreesToRadians(angle)};
     }
 
+    static async #RepeatCalcTargetZombieCount() {
+        // Fixed starting wave
+        this.targetZombieCount = 80;
+        await mod.Wait(30);
+
+        // Wave
+        const interval = 15;
+        while (this.isActive) {
+            this.targetZombieCount = mod.Floor(mod.RandomReal(30, 50));
+            await mod.Wait(interval);
+            this.targetZombieCount = 80;
+            await mod.Wait(interval);
+        }
+    }
+
     static async #RepeatSpawn() {
         while (this.isActive) {
             this.#SpawnZombies();
@@ -677,11 +732,18 @@ class GameDirector {
         const totalZombieCount = AISpawner.GetWaitingCount() + ZombieManager.GetInstanceCount();
         const aliveNestCount = ZombieNestManager.allNests.filter(nest => nest.isAlive).length;
         if (aliveNestCount > 0) {
-            const totalSpawnCount = this.#maxZombieCount - totalZombieCount;
-            const spawnCountEachNest = Math.min(mod.Floor(totalSpawnCount / aliveNestCount), this.#maxZombieSpawnCountEachNest);
-            for (const nest of ZombieNestManager.allNests) {
-                if (nest.isAlive) {
-                    nest.Spawn(spawnCountEachNest);
+            const totalSpawnCount = this.targetZombieCount - totalZombieCount;
+            if (totalSpawnCount > 0) {
+                const spawnCountEachNest = Math.min(mod.Floor(totalSpawnCount / aliveNestCount), this.#maxZombieSpawnCountEachNest);
+                DebugBoard.Set(4, totalSpawnCount);
+                DebugBoard.Set(5, aliveNestCount);
+                DebugBoard.Set(6, spawnCountEachNest);
+                if (spawnCountEachNest > 0) {
+                    for (const nest of ZombieNestManager.allNests) {
+                        if (nest.isAlive) {
+                            nest.Spawn(spawnCountEachNest);
+                        }
+                    }
                 }
             }
         }
@@ -724,9 +786,10 @@ class DamageUtility {
 }
 
 class ZombiePenalty {
-    static hqKillRadius: number = 5;
-    static speedDamageThreshold: number = 0.01;
-    static speedDamageRate: number = 10;
+    static hqSafetyRadius: number = 8;
+    static speedThreshold: number = 0.01;
+    static penaltyDecreaseRate: number = 0.5;
+    static penaltyKillThreshold: number = 10;
 
     static isEnabled: boolean = true;
 
@@ -735,25 +798,61 @@ class ZombiePenalty {
     }
 
     static async #RepeatCheck() {
-        const interval = 1 / 10;
+        const interval = 1 / 30;
         const hqPosition = mod.GetObjectPosition(mod.GetHQ(1));
         while (this.isEnabled) {
             await mod.Wait(interval);
             const zombies = ZombieManager.allZombies.values();
             for (const zombie of zombies) {
-                // Leave from HQ
-                const hqDistance = mod.DistanceBetween(mod.GetObjectPosition(zombie.player), hqPosition);
-                if (hqDistance < this.hqKillRadius) {
-                    mod.Kill(zombie.player);
+                let additionalPenalty = 0;
+
+                // Teleport zombies in HQ
+                const zombiePosition = mod.GetObjectPosition(zombie.player);
+                const hqDistance = mod.DistanceBetween(hqPosition, zombiePosition);
+                if (hqDistance < this.hqSafetyRadius) {
+                    const dir = mod.DirectionTowards(hqPosition, zombiePosition);
+                    let farPos = mod.Add(hqPosition, mod.Multiply(dir, this.hqSafetyRadius + 0.1));
+                    farPos = mod.CreateVector(mod.XComponentOf(farPos), mod.YComponentOf(zombiePosition), mod.ZComponentOf(farPos));
+                    const faceDir = mod.GetSoldierState(zombie.player, mod.SoldierStateVector.GetFacingDirection);
+                    const rad = Math.atan2(mod.XComponentOf(faceDir), mod.ZComponentOf(faceDir));
+                    mod.Teleport(zombie.player, farPos, rad);
+                    additionalPenalty += interval * 10;
                 }
-                // No stop
+
+                // Speed penalty
                 const velocity = mod.GetSoldierState(zombie.player, mod.SoldierStateVector.GetLinearVelocity);
                 const speed = mod.DistanceBetween(zeroVector, velocity);
-                if (speed < this.speedDamageThreshold) {
-                    mod.DealDamage(zombie.player, this.speedDamageRate * interval);
+                if (speed < this.speedThreshold) {
+                    additionalPenalty += interval;
+                }
+
+                zombie.penaltyStack += additionalPenalty;
+                if (additionalPenalty == 0) {
+                    zombie.penaltyStack -= interval * this.penaltyDecreaseRate;
+                }
+
+                zombie.penaltyStack = Math.max(0, zombie.penaltyStack);
+
+                // Kill
+                if (zombie.penaltyStack > this.penaltyKillThreshold) {
+                    mod.Kill(zombie.player);
                 }
             }
         }
+    }
+}
+
+class SurvivorModifier {
+    static OnDeployed(player: mod.Player) {
+        void this.#LookToEnemyBaseWithDelay(player);
+    }
+
+    static async #LookToEnemyBaseWithDelay(player: mod.Player) {
+        await mod.Wait(0.1);
+        const position = mod.GetObjectPosition(player);
+        const dir = mod.DirectionTowards(position, mod.GetObjectPosition(mod.GetHQ(2)));
+        const rad = Math.atan2(mod.XComponentOf(dir), mod.ZComponentOf(dir));
+        mod.Teleport(player, position, rad);
     }
 }
 
