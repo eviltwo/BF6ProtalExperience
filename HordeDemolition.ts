@@ -1,4 +1,4 @@
-import VoiceOverFlags = mod.VoiceOverFlags;
+import InventorySlots = mod.InventorySlots;
 
 const enableDebug: boolean = true;
 
@@ -32,6 +32,7 @@ export function OnPlayerLeaveGame(eventNumber: number) {
 export function OnPlayerDeployed(eventPlayer: mod.Player): void {
     SurvivorModifier.OnDeployed(eventPlayer);
     AISpawner.OnDeployed(eventPlayer);
+    ZombieModifier.OnDeploy(eventPlayer);
     ZombieManager.OnDeployed(eventPlayer);
     PlayerNotifications.Get(eventPlayer)?.Push({
         message: mod.Message(mod.stringkeys.briefing),
@@ -111,7 +112,7 @@ class AISpawner {
     static #TrySpawnNext() {
         if (!this.#isDeploying && this.waitingDeployParams.length > 0) {
             this.#isDeploying = true;
-            mod.SpawnAIFromAISpawner(this.spawner, this.team);
+            mod.SpawnAIFromAISpawner(this.spawner, mod.Message(mod.stringkeys.enemy_name), this.team);
         }
     }
 
@@ -328,6 +329,13 @@ class Zombie {
     }
 }
 
+class ZombieModifier {
+    static OnDeploy(player: mod.Player) {
+        // Fix for using smoke grenade
+        mod.RemoveEquipment(player, InventorySlots.Throwable);
+    }
+}
+
 class ZombieManager {
     static team: mod.Team;
     static allZombies: Map<number, Zombie> = new Map();
@@ -400,7 +408,7 @@ class ZombieNest {
     #worldIcon: mod.WorldIcon;
     #interactPoint: mod.InteractPoint;
     #bombObj: any;
-    #armedVoice: mod.VO;
+    #voiceOver: mod.VO;
     #alarmSound: mod.SFX;
     #explosionEffect: mod.VFX;
     #areaEffect: mod.VFX;
@@ -419,7 +427,7 @@ class ZombieNest {
         this.#worldIcon = mod.SpawnObject(mod.RuntimeSpawn_Common.WorldIcon, mod.Add(this.position, mod.Multiply(mod.UpVector(), 0.3)), this.rotation);
         this.#interactPoint = mod.SpawnObject(mod.RuntimeSpawn_Common.InteractPoint, mod.Add(this.position, mod.Multiply(mod.UpVector(), 0.3)), this.rotation);
         this.#bombObj = mod.SpawnObject(mod.RuntimeSpawn_Common.OrdinanceCrate_01, this.position, this.rotation);
-        this.#armedVoice = mod.SpawnObject(mod.RuntimeSpawn_Common.SFX_VOModule_OneShot2D, zeroVector, zeroVector);
+        this.#voiceOver = mod.SpawnObject(mod.RuntimeSpawn_Common.SFX_VOModule_OneShot2D, zeroVector, zeroVector);
         this.#alarmSound = mod.SpawnObject(mod.RuntimeSpawn_Common.SFX_Alarm, this.position, this.rotation);
         this.#areaEffect = mod.SpawnObject(mod.RuntimeSpawn_Common.FX_SupplyVehicleStation_Range_Indicator, this.position, this.rotation);
         this.#explosionEffect = mod.SpawnObject(mod.RuntimeSpawn_Common.FX_CivCar_SUV_Explosion, this.position, this.rotation);
@@ -431,7 +439,7 @@ class ZombieNest {
         mod.UnspawnObject(this.#worldIcon);
         mod.UnspawnObject(this.#interactPoint);
         mod.UnspawnObject(this.#bombObj);
-        mod.UnspawnObject(this.#armedVoice);
+        mod.UnspawnObject(this.#voiceOver);
         mod.UnspawnObject(this.#alarmSound);
         mod.UnspawnObject(this.#areaEffect);
     }
@@ -478,7 +486,7 @@ class ZombieNest {
 
     async #PlayArmedBombSequence(armedPlayer: mod.Player) {
         mod.EnableVFX(this.#areaEffect, true);
-        mod.PlayVO(this.#armedVoice, mod.VoiceOverEvents2D.MComArmFriendly, this.settings.voiceOverFlag);
+        mod.PlayVO(this.#voiceOver, mod.VoiceOverEvents2D.MComArmEnemy, this.settings.voiceOverFlag);
         mod.EnableInteractPoint(this.#interactPoint, false);
         mod.SetWorldIconText(this.#worldIcon, mod.Message(mod.stringkeys.percentage, 0, 0));
         mod.EnableWorldIconText(this.#worldIcon, true);
@@ -507,6 +515,7 @@ class ZombieNest {
         }
 
         this.isAlive = false;
+        mod.PlayVO(this.#voiceOver, mod.VoiceOverEvents2D.MComDestroyedEnemy, this.settings.voiceOverFlag);
         mod.EnableVFX(this.#areaEffect, false);
         mod.EnableSFX(this.#alarmSound, false);
         this.#Explode(armedPlayer);
