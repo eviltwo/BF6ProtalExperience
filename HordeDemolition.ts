@@ -330,14 +330,18 @@ class Zombie {
 }
 
 class ZombieModifier {
+    static team: mod.Team = mod.GetTeam(2);
+
     static OnDeploy(player: mod.Player) {
-        // Fix for using smoke grenade
-        mod.RemoveEquipment(player, InventorySlots.Throwable);
+        if (mod.Equals(mod.GetTeam(player), this.team)) {
+            // Fix for using smoke grenade
+            mod.RemoveEquipment(player, InventorySlots.Throwable);
+        }
     }
 }
 
 class ZombieManager {
-    static team: mod.Team;
+    static team: mod.Team = mod.GetTeam(2);
     static allZombies: Map<number, Zombie> = new Map();
 
     static OnDeployed(player: mod.Player) {
@@ -439,7 +443,6 @@ class ZombieNest {
         mod.UnspawnObject(this.#worldIcon);
         mod.UnspawnObject(this.#interactPoint);
         mod.UnspawnObject(this.#bombObj);
-        mod.UnspawnObject(this.#voiceOver);
         mod.UnspawnObject(this.#alarmSound);
         mod.UnspawnObject(this.#areaEffect);
     }
@@ -486,7 +489,7 @@ class ZombieNest {
 
     async #PlayArmedBombSequence(armedPlayer: mod.Player) {
         mod.EnableVFX(this.#areaEffect, true);
-        mod.PlayVO(this.#voiceOver, mod.VoiceOverEvents2D.MComArmEnemy, this.settings.voiceOverFlag);
+        mod.PlayVO(this.#voiceOver, mod.VoiceOverEvents2D.MComArmFriendly, this.settings.voiceOverFlag);
         mod.EnableInteractPoint(this.#interactPoint, false);
         mod.SetWorldIconText(this.#worldIcon, mod.Message(mod.stringkeys.percentage, 0, 0));
         mod.EnableWorldIconText(this.#worldIcon, true);
@@ -515,7 +518,7 @@ class ZombieNest {
         }
 
         this.isAlive = false;
-        mod.PlayVO(this.#voiceOver, mod.VoiceOverEvents2D.MComDestroyedEnemy, this.settings.voiceOverFlag);
+        mod.PlayVO(this.#voiceOver, mod.VoiceOverEvents2D.MComDestroyedFriendly, this.settings.voiceOverFlag);
         mod.EnableVFX(this.#areaEffect, false);
         mod.EnableSFX(this.#alarmSound, false);
         this.#Explode(armedPlayer);
