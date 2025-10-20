@@ -1,0 +1,17 @@
+{
+  "yes": "Yes",
+  "no": "No",
+  "ok": "OK",
+  "target": "Target",
+  "main_target": "Main Base",
+  "sub_target": "Outpost",
+  "percentage": "{}.{}%",
+  "briefing": "Activate the bomb and destroy enemy bases.",
+  "bomb_armed": "{} has armed the bomb. Defend it.",
+  "in_area": "Defend the area.",
+  "out_area": "Return to the area.",
+  "target_destroyed": "{} destroyed {}.",
+  "dbg": "Debug",
+  "dbg_value": "Debug {}",
+  "dbg_board": "{}: {}"
+}
