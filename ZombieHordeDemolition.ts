@@ -1,5 +1,3 @@
-import InventorySlots = mod.InventorySlots;
-
 const enableDebug: boolean = false;
 
 const aiSpawnerId: number = 101;
@@ -335,7 +333,7 @@ class ZombieModifier {
     static OnDeploy(player: mod.Player) {
         if (mod.Equals(mod.GetTeam(player), this.team)) {
             // Fix for using smoke grenade
-            mod.RemoveEquipment(player, InventorySlots.Throwable);
+            mod.RemoveEquipment(player, mod.InventorySlots.Throwable);
         }
     }
 }
