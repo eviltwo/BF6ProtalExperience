@@ -1,0 +1,8 @@
+{
+  "yes": "Yes",
+  "no": "No",
+  "ok": "OK",
+  "dbg": "Debug",
+  "dbg_value": "Debug {}",
+  "dbg_board": "{}: {}"
+}
