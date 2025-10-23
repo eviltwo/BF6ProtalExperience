@@ -12,7 +12,6 @@ export async function OnGameModeStarted() {
 }
 
 export function OnPlayerJoinGame(eventPlayer: mod.Player) {
-    mod.AIEnableTargeting(eventPlayer, false);
 }
 
 export function OnPlayerLeaveGame(eventNumber: number) {
